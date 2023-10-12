@@ -428,8 +428,6 @@ class MCP2515
             MCP_RXB1DATA = 0x76
         };
 
-        static const uint32_t DEFAULT_SPI_CLOCK = 10000000; // 10MHz
-
         static const int N_TXBUFFERS = 3;
         static const int N_RXBUFFERS = 2;
 
