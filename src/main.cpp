@@ -1,21 +1,16 @@
-#include "main.h"
+#include "stm32f4xx_hal.h"
 #include "mcp2515.h"
 #include "string.h"
-#include "usart.h"
+#include "Logger.h"
+#include "peripheral_config.h"
+#include "error_handler.h"
 #include "can_helpers.h"
 #include <stdio.h>
 #include <math.h>
 #include <cstring>
 #include <cmath>
 
-SPI_HandleTypeDef hspi1;
-
-#define SPI_GPIO_PORT GPIOB;
-#define SPI_CS_PIN GPIO_PIN_6;
-
 void SystemClock_Config(void);
-static void MX_GPIO_Init(void);
-static void MX_SPI1_Init(void);
 
 int main(void)
 {
@@ -23,9 +18,11 @@ int main(void)
     SystemClock_Config();
 
     // Initialize all configured peripherals
-    MX_GPIO_Init();
-    MX_SPI1_Init();
-    USART2_Init();
+    if (!InitializeHardware())
+    {
+        Error_Handler();
+    }
+
 
     auto mcp2515 = MCP2515(&hspi1);
 
@@ -157,48 +154,6 @@ void SystemClock_Config(void)
     {
         Error_Handler();
     }
-}
-
-static void MX_SPI1_Init(void)
-{
-    hspi1.Instance = SPI1;
-    hspi1.Init.Mode = SPI_MODE_MASTER;
-    hspi1.Init.Direction = SPI_DIRECTION_2LINES;
-    hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
-    hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
-    hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
-    hspi1.Init.NSS = SPI_NSS_SOFT;
-    hspi1.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_8;
-    hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
-    hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
-    hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-    hspi1.Init.CRCPolynomial = 10;
-    if (HAL_SPI_Init(&hspi1) != HAL_OK)
-    {
-        Error_Handler();
-    }
-}
-
-static void MX_GPIO_Init(void)
-{
-    GPIO_InitTypeDef GPIO_InitStruct = {0};
-    __HAL_RCC_GPIOA_CLK_ENABLE();
-    __HAL_RCC_GPIOB_CLK_ENABLE();
-
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_6, GPIO_PIN_RESET);
-
-    GPIO_InitStruct.Pin = GPIO_PIN_6;
-    GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-    GPIO_InitStruct.Pull = GPIO_NOPULL;
-    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-}
-
-void Error_Handler(void)
-{
-    __disable_irq();
-    while (1)
-    {}
 }
 
 #ifdef USE_FULL_ASSERT
