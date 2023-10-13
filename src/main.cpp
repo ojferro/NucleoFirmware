@@ -1,10 +1,10 @@
 #include "stm32f4xx_hal.h"
-#include "mcp2515.h"
+#include "mcp2515.hpp"
+#include "ODrive.hpp"
 #include "string.h"
 #include "Logger.h"
 #include "peripheral_config.h"
 #include "error_handler.h"
-#include "can_helpers.h"
 #include <stdio.h>
 #include <math.h>
 #include <cstring>
@@ -29,8 +29,8 @@ int main(void)
     MCP2515::ERROR _e;
     _e = mcp2515.reset();
     _e = mcp2515.setBitrate(CAN_250KBPS, MCP_8MHZ);
-    _e = mcp2515.setLoopbackMode();
-    // _e = mcp2515.setNormalMode();
+    // _e = mcp2515.setLoopbackMode();
+    _e = mcp2515.setNormalMode();
 
     if (_e != MCP2515::ERROR_OK)
     {
@@ -48,16 +48,17 @@ int main(void)
     // const auto velocityControl = uint32_t{0x002};
     // const auto positionControl = uint32_t{0x003};
 
-    // const auto axisCanID = uint32_t{0x3};
+    // Request Bus Voltage
+    ODrive::Axis axis0(0x3, mcp2515);
+    axis0.setRequestedState(ODrive::AxisState::IDLE);
+    // axis0.getBusVoltageCurrent();
+    // auto txMsg_GetBusVoltage = CANFrame{};
+    // txMsg_GetBusVoltage.id = axisCANID << 5 | requestBusVoltageCmd | CAN_RTR_FLAG;
+    // txMsg_GetBusVoltage.dlc = 0;
 
-    // // Request Bus Voltage
-    // auto txMsg_GetBusVoltage = can_frame{};
-    // txMsg_GetBusVoltage.can_id = axisCanID << 5 | requestBusVoltageCmd | CAN_RTR_FLAG;
-    // txMsg_GetBusVoltage.can_dlc = 0;
-
-    // auto txMsg_SetAxisRequestedStateCmd = can_frame{};
-    // txMsg_SetAxisRequestedStateCmd.can_id = axisCanID << 5 | setAxisRequestedStateCmd;
-    // txMsg_SetAxisRequestedStateCmd.can_dlc = 4;
+    // auto txMsg_SetAxisRequestedStateCmd = CANFrame{};
+    // txMsg_SetAxisRequestedStateCmd.id = axisCanID << 5 | setAxisRequestedStateCmd;
+    // txMsg_SetAxisRequestedStateCmd.dlc = 4;
     // uint8_t *ptrToFloat;
     // ptrToFloat = (uint8_t *)&idleState;
     // txMsg_SetAxisRequestedStateCmd.data[0] = ptrToFloat[0];
@@ -72,58 +73,42 @@ int main(void)
 
     while (1)
     {
-        can_frame rxMsg;
+        CANFrame rxMsg;
         if (mcp2515.readMessage(&rxMsg) == MCP2515::ERROR_OK)
         {
-            uint8_t dlc;
-            uint32_t id;
-            id = rxMsg.can_id;
-            dlc = rxMsg.can_dlc;
+            uint32_t odrvID  = rxMsg.id >> 5;
+            uint32_t odrvCmd = rxMsg.id & 0b11111;
+            // uint8_t dlc  = rxMsg.dlc;
 
-            debugLog("Received CAN message.\n");
-            debugLogFmt("id: %d, dlc: %d, data[0]: %d \n", id, dlc, rxMsg.data[0]);
+            if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
+            {
+                const auto encoderPos = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
+                const auto encoderVel = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
 
-            // uint8_t odrv_id, odrv_cmd;
-            // odrv_id = id >> 5;
-            // odrv_cmd = id & 0b11111;
+                debugLogFmt("encoder_position:%.3f\n", encoderPos);
+                debugLogFmt("encoder_velocity:%f\n", encoderVel);
 
-            // if (odrv_id == 3 && odrv_cmd == 0x09)
-            // {
-            //     can_Message_t rxMsgOdrv;
-            //     rxMsgOdrv.id = odrv_id;
-            //     rxMsgOdrv.len = dlc;
+                axis0.getBusVoltageCurrent();
+            }
 
-            //     std::memcpy(rxMsgOdrv.buf, rxMsg.data, dlc);
-            //     const auto encoderPos = can_getSignal<float>(rxMsgOdrv, 0, 32, true, 1, 0);
-            //     const auto encoderVel = can_getSignal<float>(rxMsgOdrv, 4, 32, true, 1, 0);
+            if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::GET_BUS_VOLTAGE_CURRENT)
+            {
+                const auto busVoltage = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
+                // const auto busCurrent = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
 
-            //     debugLogFmt("encoder_position:%.3f\n", encoderPos);
-            //     debugLogFmt("encoder_velocity:%f\n", encoderVel);
-
-            //     mcp2515.sendMessage(&txMsg_GetBusVoltage);
-            // }
-
-            // if (odrv_id == 3 && odrv_cmd == 0x017)
-            // {
-            //     can_Message_t rxMsgOdrv;
-            //     rxMsgOdrv.id = odrv_id;
-            //     rxMsgOdrv.len = dlc;
-
-            //     std::memcpy(rxMsgOdrv.buf, rxMsg.data, dlc);
-            //     const auto busVoltage = can_getSignal<float>(rxMsgOdrv, 0, 32, true, 1, 0);
-
-            //     debugLogFmt("bus_voltage:%.3f\n", busVoltage);
-            // }
+                debugLogFmt("bus_voltage:%.3f\n", busVoltage);
+            }
         }
 
-        can_frame txMsg;
-        txMsg.can_id = 27;
-        txMsg.can_dlc = 1;
-        txMsg.data[0] = 'a';
-        mcp2515.sendMessage(&txMsg);
+        // CANFrame txMsg;
+        // txMsg.id = 27;
+        // txMsg.dlc = 1;
+        // txMsg.data[0] = 'a';
+        // mcp2515.sendMessage(&txMsg);
 
-        debugLog("Sent CAN message.\n");
-        HAL_Delay(100);
+
+        // debugLog("Sent CAN message.\n");
+        // HAL_Delay(5);
     }
 }
 

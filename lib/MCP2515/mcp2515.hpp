@@ -1,8 +1,10 @@
+#pragma once
+
 #ifndef _MCP2515_H_
 #define _MCP2515_H_
 
 #include "stm32f4xx_hal.h"
-#include "can.h"
+#include "can.hpp"
 
 /*
  *  Speed 8M
@@ -476,10 +478,10 @@ class MCP2515
         ERROR setBitrate(const CAN_SPEED canSpeed, const CAN_CLOCK canClock);
         ERROR setFilterMask(const MASK num, const bool ext, const uint32_t ulData);
         ERROR setFilter(const RXF num, const bool ext, const uint32_t ulData);
-        ERROR sendMessage(const TXBn txbn, const struct can_frame *frame);
-        ERROR sendMessage(const struct can_frame *frame);
-        ERROR readMessage(const RXBn rxbn, struct can_frame *frame);
-        ERROR readMessage(struct can_frame *frame);
+        ERROR sendMessage(const TXBn txbn, const struct CANFrame *frame);
+        ERROR sendMessage(const struct CANFrame* frame); // TODO: Change to pass by reference instead of ptr.
+        ERROR readMessage(const RXBn rxbn, struct CANFrame *frame);
+        ERROR readMessage(struct CANFrame *frame);
         bool checkReceive(void);
         bool checkError(void);
         uint8_t getErrorFlags(void);

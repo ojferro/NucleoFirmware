@@ -1,4 +1,4 @@
-#include "mcp2515.h"
+#include "mcp2515.hpp"
 #include <string.h> // For memset
 #include <assert.h>
 
@@ -585,9 +585,9 @@ MCP2515::ERROR MCP2515::setFilter(const RXF num, const bool ext, const uint32_t 
     return ERROR_OK;
 }
 
-MCP2515::ERROR MCP2515::sendMessage(const TXBn txbn, const struct can_frame *frame)
+MCP2515::ERROR MCP2515::sendMessage(const TXBn txbn, const struct CANFrame *frame)
 {
-    if (frame->can_dlc > CAN_MAX_DLEN) {
+    if (frame->dlc > CAN_MAX_DLEN) {
         return ERROR_FAILTX;
     }
 
@@ -595,17 +595,17 @@ MCP2515::ERROR MCP2515::sendMessage(const TXBn txbn, const struct can_frame *fra
 
     uint8_t data[13];
 
-    bool ext = (frame->can_id & CAN_EFF_FLAG);
-    bool rtr = (frame->can_id & CAN_RTR_FLAG);
-    uint32_t id = (frame->can_id & (ext ? CAN_EFF_MASK : CAN_SFF_MASK));
+    bool ext = (frame->id & CAN_EFF_FLAG);
+    bool rtr = (frame->id & CAN_RTR_FLAG);
+    uint32_t id = (frame->id & (ext ? CAN_EFF_MASK : CAN_SFF_MASK));
 
     prepareId(data, ext, id);
 
-    data[MCP_DLC] = rtr ? (frame->can_dlc | RTR_MASK) : frame->can_dlc;
+    data[MCP_DLC] = rtr ? (frame->dlc | RTR_MASK) : frame->dlc;
 
-    memcpy(&data[MCP_DATA], frame->data, frame->can_dlc);
+    memcpy(&data[MCP_DATA], frame->data, frame->dlc);
 
-    setRegisters(txbuf->SIDH, data, 5 + frame->can_dlc);
+    setRegisters(txbuf->SIDH, data, 5 + frame->dlc);
 
     modifyRegister(txbuf->CTRL, TXB_TXREQ, TXB_TXREQ);
 
@@ -616,9 +616,9 @@ MCP2515::ERROR MCP2515::sendMessage(const TXBn txbn, const struct can_frame *fra
     return ERROR_OK;
 }
 
-MCP2515::ERROR MCP2515::sendMessage(const struct can_frame *frame)
+MCP2515::ERROR MCP2515::sendMessage(const struct CANFrame* frame)
 {
-    if (frame->can_dlc > CAN_MAX_DLEN) {
+    if (frame->dlc > CAN_MAX_DLEN) {
         return ERROR_FAILTX;
     }
 
@@ -635,7 +635,7 @@ MCP2515::ERROR MCP2515::sendMessage(const struct can_frame *frame)
     return ERROR_ALLTXBUSY;
 }
 
-MCP2515::ERROR MCP2515::readMessage(const RXBn rxbn, struct can_frame *frame)
+MCP2515::ERROR MCP2515::readMessage(const RXBn rxbn, struct CANFrame *frame)
 {
     const struct RXBn_REGS *rxb = &RXB[rxbn];
 
@@ -662,8 +662,8 @@ MCP2515::ERROR MCP2515::readMessage(const RXBn rxbn, struct can_frame *frame)
         id |= CAN_RTR_FLAG;
     }
 
-    frame->can_id = id;
-    frame->can_dlc = dlc;
+    frame->id = id;
+    frame->dlc = dlc;
 
     readRegisters(rxb->DATA, frame->data, dlc);
 
@@ -672,7 +672,7 @@ MCP2515::ERROR MCP2515::readMessage(const RXBn rxbn, struct can_frame *frame)
     return ERROR_OK;
 }
 
-MCP2515::ERROR MCP2515::readMessage(struct can_frame *frame)
+MCP2515::ERROR MCP2515::readMessage(struct CANFrame *frame)
 {
     ERROR rc;
     uint8_t stat = getStatus();
