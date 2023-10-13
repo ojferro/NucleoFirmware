@@ -41,8 +41,8 @@ void handleCANRx(CANFrame& rxMsg){
 
 // TODO: Remove this ugly global function, needed for DMA right now.
 
-#define RxBuf_SIZE 10
-#define MainBuf_SIZE 20
+#define RxBuf_SIZE 16 // TODO: TOMORROW!!! This goes crazy when you increase it past 16...??? Investigate what's happening
+#define MainBuf_SIZE 32
 
 uint8_t RxBuf[RxBuf_SIZE];
 uint8_t MainBuf[MainBuf_SIZE];
@@ -51,25 +51,28 @@ bool receivedData = false;
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t size){
     memcpy(MainBuf, RxBuf, RxBuf_SIZE);
     receivedData = true;
-    // HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
-    // __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
+
+    // TODO: Without these 2 lines, it goes crazy. Investigate why.
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
+    __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
 }
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) 
-{
-    receivedData = true;
-    HAL_UART_Receive_DMA(&huart2, RxBuf, 4);
-    HAL_UART_Transmit(&huart2, RxBuf, RxBuf_SIZE, 100);
-}
+// void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) 
+// {
+//     receivedData = true;
+//     debugLog("dbg_msg:HAL_UART_RxCpltCallback\n");
+//     HAL_UART_Receive_DMA(&huart2, RxBuf, 4);
+//     HAL_UART_Transmit(&huart2, RxBuf, RxBuf_SIZE, 100);
+// }
 
-void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
-{ 
-  if (huart->Instance == USART2)
-  {
-      huart2.gState = HAL_UART_STATE_READY;
-     __NOP();
-  }
-}
+// void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+// { 
+//   if (huart->Instance == USART2)
+//   {
+//       huart2.gState = HAL_UART_STATE_READY;
+//      __NOP();
+//   }
+// }
  
 // extern uint8_t rx_buffer[];
  
@@ -171,8 +174,8 @@ int main(void)
 
         if (HAL_UART_Receive_DMA(&huart2, uartFrameRx, 4)  == HAL_OK)
             debugLog("dbg_msg:Received data!\n");
-        // if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
-        //     handleCANRx(canFrameRx);
+        if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
+            handleCANRx(canFrameRx);
 
         // if (HAL_UART_Receive(&huart2, uartFrameRx, 10, 1) == HAL_OK)
         // {
