@@ -39,6 +39,57 @@ void handleCANRx(CANFrame& rxMsg){
 }
 
 
+// TODO: Remove this ugly global function, needed for DMA right now.
+
+#define RxBuf_SIZE 10
+#define MainBuf_SIZE 20
+
+uint8_t RxBuf[RxBuf_SIZE];
+uint8_t MainBuf[MainBuf_SIZE];
+bool receivedData = false;
+
+void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t size){
+    memcpy(MainBuf, RxBuf, RxBuf_SIZE);
+    receivedData = true;
+    // HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
+    // __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
+}
+
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) 
+{
+    receivedData = true;
+    HAL_UART_Receive_DMA(&huart2, RxBuf, 4);
+    HAL_UART_Transmit(&huart2, RxBuf, RxBuf_SIZE, 100);
+}
+
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
+{ 
+  if (huart->Instance == USART2)
+  {
+      huart2.gState = HAL_UART_STATE_READY;
+     __NOP();
+  }
+}
+ 
+// extern uint8_t rx_buffer[];
+ 
+// void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+// {
+//   if (huart->Instance == USART2)
+//   {
+//     HAL_UART_Receive_DMA(&huart2, rx_buffer, 4);
+//     __NOP();
+//   }
+// }
+ 
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+{
+  if (huart->Instance == USART2)
+  {
+    __NOP();
+  }
+}
+
 int main(void)
 {
     HAL_Init();
@@ -98,22 +149,42 @@ int main(void)
     // else
     //     debugLog("Sent calibration sequence.\n");
 
+    // debugLog("dbg_msg:Initial print\n");
+    HAL_UART_Transmit_DMA(&huart2, (uint8_t*)"dbg_msg:Initial PRINT\n", 22);
+    HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
+    // __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
     CANFrame canFrameRx;
     uint8_t  uartFrameRx[16];
     while (1)
     {
-        // if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
-        //     handleCANRx(canFrameRx);
-
-        if (HAL_UART_Receive(&huart2, uartFrameRx, 10, 1) == HAL_OK)
+        if (receivedData)
         {
+            receivedData = false;
             std::string strRx = "dbg_msg:"; // initialize empty string
-            for (const auto& element : uartFrameRx) {
+            for (const auto& element : RxBuf) {
                 strRx += static_cast<char>(element); // convert each element to its ASCII representation and append to string
             }
             strRx+= "\n";
             debugLog(strRx.c_str());
+            // debugLog("dbg_msg:Received data!\n");
         }
+
+        if (HAL_UART_Receive_DMA(&huart2, uartFrameRx, 4)  == HAL_OK)
+            debugLog("dbg_msg:Received data!\n");
+        // if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
+        //     handleCANRx(canFrameRx);
+
+        // if (HAL_UART_Receive(&huart2, uartFrameRx, 10, 1) == HAL_OK)
+        // {
+        //     std::string strRx = "dbg_msg:"; // initialize empty string
+        //     for (const auto& element : uartFrameRx) {
+        //         strRx += static_cast<char>(element); // convert each element to its ASCII representation and append to string
+        //     }
+        //     strRx+= "\n";
+        //     debugLog(strRx.c_str());
+        // }
+
+        // debugLog("dbg_msg:.");
 
         // CANFrame txMsg;
         // txMsg.id = 27;

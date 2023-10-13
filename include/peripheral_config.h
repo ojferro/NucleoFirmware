@@ -21,6 +21,13 @@ extern SPI_HandleTypeDef hspi1;
 bool SPI1_Init(void);
 /////////////////////////////////////
 
+
+////////////// DMA //////////////////
+extern DMA_HandleTypeDef hdma_usart2_rx;
+extern DMA_HandleTypeDef hdma_usart2_tx;
+void DMA_Init(void);
+/////////////////////////////////////
+
 //////////////// USART //////////////
 extern UART_HandleTypeDef huart2;
 
