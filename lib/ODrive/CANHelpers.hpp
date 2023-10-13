@@ -7,29 +7,13 @@
 #include <cstring>
 #include <iterator>
 
-#include <iterator>
+
+// TODO: Make CANFrame const arg
 template <typename T>
 constexpr T can_getSignal(CANFrame& frame, const uint8_t startBit, const uint8_t length, const bool isIntel)
 {
-    // uint64_t tempVal = 0;
-    // uint64_t mask = length < 64 ? (1ULL << length) - 1ULL : -1ULL;
-
-    // if (isIntel) {
-    //     std::memcpy(&tempVal, &frame.data, sizeof(tempVal));
-    //     tempVal = (tempVal >> startBit) & mask;
-    // } else {
-    //     std::reverse(std::begin(frame.data), std::end(frame.data));
-    //     std::memcpy(&tempVal, &frame.data, sizeof(tempVal));
-    //     tempVal = (tempVal >> (64 - startBit - length)) & mask;
-    // }
-
-    // T retVal = T();
-    // std::memcpy(&retVal, &tempVal, sizeof(T));
-    // return retVal;
-
     const auto byte_count = length / 8;
     uint8_t tempVal[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-    // uint64_t mask = length < 64 ? (1ULL << length) - 1ULL : -1ULL;
 
     if (isIntel) {
         std::memcpy(&tempVal[8-byte_count], &frame.data[startBit], byte_count);

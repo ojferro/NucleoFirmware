@@ -12,6 +12,33 @@
 
 void SystemClock_Config(void);
 
+void handleCANRx(CANFrame& rxMsg){
+    uint32_t odrvID  = rxMsg.id >> 5;
+    uint32_t odrvCmd = rxMsg.id & 0b11111;
+
+    if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
+    {
+        const auto encoderPos = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
+        const auto encoderVel = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
+
+        debugLogFmt("encoder_position:%.3f\n", encoderPos);
+        debugLogFmt("encoder_velocity:%f\n", encoderVel);
+
+        // Note: this is an "async" call. Axis will reply with Voltage+Current right after
+        // If HAL_Delay() is set too long in the loop, new CAN messages will overwrite this one
+        // axis0.getBusVoltageCurrent();
+    }
+
+    if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::GET_BUS_VOLTAGE_CURRENT)
+    {
+        const auto busVoltage = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
+        // const auto busCurrent = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
+
+        debugLogFmt("bus_voltage:%.3f\n", busVoltage);
+    }
+}
+
+
 int main(void)
 {
     HAL_Init();
@@ -71,33 +98,21 @@ int main(void)
     // else
     //     debugLog("Sent calibration sequence.\n");
 
+    CANFrame canFrameRx;
+    uint8_t  uartFrameRx[16];
     while (1)
     {
-        CANFrame rxMsg;
-        if (mcp2515.readMessage(&rxMsg) == MCP2515::ERROR_OK)
+        // if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
+        //     handleCANRx(canFrameRx);
+
+        if (HAL_UART_Receive(&huart2, uartFrameRx, 10, 1) == HAL_OK)
         {
-            uint32_t odrvID  = rxMsg.id >> 5;
-            uint32_t odrvCmd = rxMsg.id & 0b11111;
-            // uint8_t dlc  = rxMsg.dlc;
-
-            if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
-            {
-                const auto encoderPos = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
-                const auto encoderVel = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
-
-                debugLogFmt("encoder_position:%.3f\n", encoderPos);
-                debugLogFmt("encoder_velocity:%f\n", encoderVel);
-
-                axis0.getBusVoltageCurrent();
+            std::string strRx = "dbg_msg:"; // initialize empty string
+            for (const auto& element : uartFrameRx) {
+                strRx += static_cast<char>(element); // convert each element to its ASCII representation and append to string
             }
-
-            if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::GET_BUS_VOLTAGE_CURRENT)
-            {
-                const auto busVoltage = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
-                // const auto busCurrent = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
-
-                debugLogFmt("bus_voltage:%.3f\n", busVoltage);
-            }
+            strRx+= "\n";
+            debugLog(strRx.c_str());
         }
 
         // CANFrame txMsg;
