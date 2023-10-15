@@ -160,34 +160,6 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef* huart, uint16_t size){
     __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
 }
 
-// void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) 
-// {
-//     receivedData = true;
-//     debugLog("dbg_msg:HAL_UART_RxCpltCallback\n");
-//     HAL_UART_Receive_DMA(&huart2, RxBuf, 4);
-//     HAL_UART_Transmit(&huart2, RxBuf, RxBuf_SIZE, 100);
-// }
-
-// void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
-// { 
-//   if (huart->Instance == USART2)
-//   {
-//       huart2.gState = HAL_UART_STATE_READY;
-//      __NOP();
-//   }
-// }
- 
-// extern uint8_t rx_buffer[];
- 
-// void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-// {
-//   if (huart->Instance == USART2)
-//   {
-//     HAL_UART_Receive_DMA(&huart2, rx_buffer, 4);
-//     __NOP();
-//   }
-// }
- 
 void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 {
   if (huart->Instance == USART2)
@@ -225,6 +197,7 @@ int main(void)
     ODrive::Axis axis0(0x3, mcp2515);
     axis0.setRequestedState(ODrive::AxisState::IDLE);
     axis0.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
+    axis0.setLimits(20.0f, 10.0f);
 
     HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
     CANFrame canFrameRx;
