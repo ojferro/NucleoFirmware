@@ -18,6 +18,7 @@ void handleCANRx(CANFrame& rxMsg){
 
     if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
     {
+        // TODO: There's something wrong with the scaling in getSignal I think....
         const auto encoderPos = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
         const auto encoderVel = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
 
@@ -38,11 +39,113 @@ void handleCANRx(CANFrame& rxMsg){
     }
 }
 
+struct CommandHandler{
+
+    CommandHandler(): m_controlMode(ODrive::ControlMode::POSITION_CONTROL){}
+
+    ODrive::ControlMode m_controlMode;
+
+    void handleMasterCmd(const std::string& strRx, ODrive::Axis& axis0){
+        // Control State
+        if (strRx.compare("calib_rtn") == 0)
+        {
+            axis0.clearErrors();
+            axis0.setRequestedState(ODrive::AxisState::FULL_CALIBRATION_SEQUENCE);
+
+            const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
+            debugLog(dbg_msg.c_str());
+        }
+        else if (strRx.compare("ClLp_ctrl") == 0)
+        {
+            axis0.setRequestedState(ODrive::AxisState::CLOSED_LOOP_CONTROL);
+
+            const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
+            debugLog(dbg_msg.c_str());
+        }
+        else if (strRx.compare("idle_ctrl") == 0)
+        {
+            axis0.setRequestedState(ODrive::AxisState::IDLE);
+
+            const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
+            debugLog(dbg_msg.c_str());
+        }
+
+        // Control Modes
+        else if (strRx.compare("posn_ctrl") == 0)
+        {
+            m_controlMode = ODrive::ControlMode::POSITION_CONTROL;
+
+            axis0.setControllerModes(m_controlMode);
+            const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
+            debugLog(dbg_msg.c_str());
+        }
+        else if (strRx.compare("velo_ctrl") == 0)
+        {
+            m_controlMode = ODrive::ControlMode::VELOCITY_CONTROL;
+            axis0.setControllerModes(m_controlMode);
+
+            const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
+            debugLog(dbg_msg.c_str());
+        }
+        else if (strRx.compare("torq_ctrl") == 0)
+        {
+            m_controlMode = ODrive::ControlMode::TORQUE_CONTROL;
+            axis0.setControllerModes(m_controlMode);
+
+            const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
+            debugLog(dbg_msg.c_str());
+        }
+        else if (strRx.compare("volt_ctrl") == 0)
+        {
+            m_controlMode = ODrive::ControlMode::VOLTAGE_CONTROL;
+            axis0.setControllerModes(m_controlMode);
+
+            const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
+            debugLog(dbg_msg.c_str());
+        }
+
+        else if (strRx.find("sp:")!=std::string::npos)
+        {
+            const auto sp = strRx.substr(3);
+            const auto setpoint = std::stof(sp);
+
+            if (m_controlMode == ODrive::ControlMode::POSITION_CONTROL)
+            {
+                axis0.setInputPos(setpoint, 0, 0);
+            }
+            else if (m_controlMode == ODrive::ControlMode::VELOCITY_CONTROL)
+            {
+                axis0.setInputVel(setpoint, 0.0f);
+            }
+            else if (m_controlMode == ODrive::ControlMode::TORQUE_CONTROL)
+            {
+                axis0.setInputTorque(setpoint);
+            }
+            else if (m_controlMode == ODrive::ControlMode::VOLTAGE_CONTROL)
+            {
+                debugLogFmt("dbg_msg: Voltage control not implemented yet\n");
+            }
+
+            debugLogFmt("dbg_msg: Setpoint %f command received\n", setpoint);
+        }
+        
+        else
+        {
+            std::string feedback = "dbg_msg:Unknown cmd " + strRx + "\n";
+            debugLog(feedback.c_str());
+        }
+    }
+};
+
 
 // TODO: Remove this ugly global function, needed for DMA right now.
 
-#define RxBuf_SIZE 16 // TODO: TOMORROW!!! This goes crazy when you increase it past 16...??? Investigate what's happening
-#define MainBuf_SIZE 32
+#define RxBuf_SIZE 9 // TODO: TOMORROW!!! This goes crazy when you increase it past 16...??? Investigate what's happening
+                      // Figured it out. Sort of. This needs to be EXACTLY the size of the msg being sent by the publisher
+                      // i.e. if this is bigger, wonky. if this is smaller, wonky.
+                      // Look into this https://github1s.com/MaJerle/stm32-usart-uart-dma-rx-tx/blob/main/projects/usart_rx_idle_line_irq_F4/Src/main.c#L83
+                      // I think that's what he's doing with the circular buffer, keeping track of which was the last byte he read, and wrapping around.
+#define MainBuf_SIZE 18
 
 uint8_t RxBuf[RxBuf_SIZE];
 uint8_t MainBuf[MainBuf_SIZE];
@@ -118,86 +221,36 @@ int main(void)
         debugLog("Error!\n");
     }
 
-    // const auto requestBusVoltageCmd = uint32_t{0x017};
-    // const auto setAxisRequestedStateCmd = uint32_t{0x007};
-    // const auto setControllerModes = uint32_t{0x00B};
-
-    // const auto idleState = uint32_t{0x001};
-    // const auto calibrationSequence = uint32_t{0x003};
-    // const auto closedLoopControl = uint32_t{0x008};
-
-    // const auto velocityControl = uint32_t{0x002};
-    // const auto positionControl = uint32_t{0x003};
-
     // Request Bus Voltage
     ODrive::Axis axis0(0x3, mcp2515);
     axis0.setRequestedState(ODrive::AxisState::IDLE);
-    // axis0.getBusVoltageCurrent();
-    // auto txMsg_GetBusVoltage = CANFrame{};
-    // txMsg_GetBusVoltage.id = axisCANID << 5 | requestBusVoltageCmd | CAN_RTR_FLAG;
-    // txMsg_GetBusVoltage.dlc = 0;
+    axis0.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
 
-    // auto txMsg_SetAxisRequestedStateCmd = CANFrame{};
-    // txMsg_SetAxisRequestedStateCmd.id = axisCanID << 5 | setAxisRequestedStateCmd;
-    // txMsg_SetAxisRequestedStateCmd.dlc = 4;
-    // uint8_t *ptrToFloat;
-    // ptrToFloat = (uint8_t *)&idleState;
-    // txMsg_SetAxisRequestedStateCmd.data[0] = ptrToFloat[0];
-    // txMsg_SetAxisRequestedStateCmd.data[1] = ptrToFloat[1];
-    // txMsg_SetAxisRequestedStateCmd.data[2] = ptrToFloat[2];
-    // txMsg_SetAxisRequestedStateCmd.data[3] = ptrToFloat[3];
-
-    // if (mcp2515.sendMessage(&txMsg_SetAxisRequestedStateCmd) != MCP2515::ERROR_OK)
-    //     debugLog("Tx Error. Did not send calibration sequence.\n");
-    // else
-    //     debugLog("Sent calibration sequence.\n");
-
-    // debugLog("dbg_msg:Initial print\n");
-    HAL_UART_Transmit_DMA(&huart2, (uint8_t*)"dbg_msg:Initial PRINT\n", 22);
     HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
-    // __HAL_DMA_DISABLE_IT(&hdma_usart2_rx, DMA_IT_HT);
     CANFrame canFrameRx;
-    uint8_t  uartFrameRx[16];
+
+    debugLog("dbg_msg:STM32 online\n");
+
+    auto cmdHandler = CommandHandler();
     while (1)
     {
         if (receivedData)
         {
             receivedData = false;
-            std::string strRx = "dbg_msg:"; // initialize empty string
+            std::string strRx = "";
             for (const auto& element : RxBuf) {
-                strRx += static_cast<char>(element); // convert each element to its ASCII representation and append to string
+                // convert each element to its ASCII representation and append to string
+                strRx += static_cast<char>(element);
             }
-            strRx+= "\n";
-            debugLog(strRx.c_str());
-            // debugLog("dbg_msg:Received data!\n");
+            
+            cmdHandler.handleMasterCmd(strRx, axis0);           
         }
 
-        if (HAL_UART_Receive_DMA(&huart2, uartFrameRx, 4)  == HAL_OK)
-            debugLog("dbg_msg:Received data!\n");
         if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
+        {
             handleCANRx(canFrameRx);
-
-        // if (HAL_UART_Receive(&huart2, uartFrameRx, 10, 1) == HAL_OK)
-        // {
-        //     std::string strRx = "dbg_msg:"; // initialize empty string
-        //     for (const auto& element : uartFrameRx) {
-        //         strRx += static_cast<char>(element); // convert each element to its ASCII representation and append to string
-        //     }
-        //     strRx+= "\n";
-        //     debugLog(strRx.c_str());
-        // }
-
-        // debugLog("dbg_msg:.");
-
-        // CANFrame txMsg;
-        // txMsg.id = 27;
-        // txMsg.dlc = 1;
-        // txMsg.data[0] = 'a';
-        // mcp2515.sendMessage(&txMsg);
-
-
-        // debugLog("Sent CAN message.\n");
-        // HAL_Delay(5);
+            // axis0.getBusVoltageCurrent();
+        }
     }
 }
 

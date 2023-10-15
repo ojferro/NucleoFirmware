@@ -2,7 +2,7 @@
 #define ODRIVE_ODRIVE_H_
 
 #include <stdint.h>
-#include "CANHelpers.hpp"
+#include "CANHelpers.h"
 #include "can.hpp"
 #include "mcp2515.hpp"
 
@@ -86,7 +86,7 @@ struct ODrive {
 			void setRequestedState(AxisState state);
 
 			// Set the Control Mode and Input Mode
-			void setControllerModes(ControlMode controlMode, InputMode inputMode);
+			void setControllerModes(ControlMode controlMode, InputMode inputMode = InputMode::PASSTHROUGH);
 
 			// Set the desired position of the axis as well as the feed-forward velocity
 			// and feed-forward torque
