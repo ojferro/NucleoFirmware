@@ -1,5 +1,6 @@
 #include "stm32f4xx_hal.h"
 #include "mcp2515.hpp"
+#include "mpu6050.hpp"
 #include "ODrive.hpp"
 #include "string.h"
 #include "Logger.h"
@@ -179,7 +180,14 @@ int main(void)
         Error_Handler();
     }
 
+    // Ensure MPU6050 is up and running
+    debugLog("dbg_msg:Initializing MPU6050\n");
+    while (MPU6050_Init(&hi2c1) == 1);
+    debugLog("dbg_msg:MPU6050 online\n");
 
+    auto mpu6050Data = MPU6050_t{};
+
+    // Initialize MCP2515
     auto mcp2515 = MCP2515(&hspi1);
 
     MCP2515::ERROR _e;
@@ -192,6 +200,7 @@ int main(void)
     {
         debugLog("Error!\n");
     }
+    debugLog("dbg_msg:MCP2515 online\n");
 
     // Request Bus Voltage
     ODrive::Axis axis0(0x3, mcp2515);
@@ -224,6 +233,14 @@ int main(void)
             handleCANRx(canFrameRx);
             // axis0.getBusVoltageCurrent();
         }
+
+        MPU6050_Read_All(&hi2c1, &mpu6050Data);
+        // debugLogFmt("g_x:%.3f, g_y:%.3f, g_z:%.3f\n", mpu6050Data.Gx, mpu6050Data.Gy, mpu6050Data.Gz);
+        // debugLogFmt("a_x:%.3f, a_y:%.3f, a_z:%.3f\n", mpu6050Data.Ax, mpu6050Data.Ay, mpu6050Data.Az);
+        debugLogFmt("K_x:%.3f, K_y:%.3f\n", mpu6050Data.KalmanAngleX, mpu6050Data.KalmanAngleY);
+
+        // debugLog("dbg_msg:Hello World\n");
+        HAL_Delay(100);
     }
 }
 
