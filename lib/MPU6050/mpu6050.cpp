@@ -15,7 +15,8 @@
 // Setup MPU6050
 #define MPU6050_ADDR 0xD0
 const uint16_t i2c_timeout = 100;
-const double Accel_Z_corrector = 14418.0;
+const double AccelZCorrector = 1.0/14418.0;
+const double AccelRawToG = 1.0/16384.0;
 
 uint32_t timer;
 
@@ -80,9 +81,9 @@ void MPU6050_Read_Accel(I2C_HandleTypeDef *I2Cx, MPU6050_t *DataStruct)
          I have configured FS_SEL = 0. So I am dividing by 16384.0
          for more details check ACCEL_CONFIG Register              ****/
 
-    DataStruct->Ax = DataStruct->Accel_X_RAW / 16384.0;
-    DataStruct->Ay = DataStruct->Accel_Y_RAW / 16384.0;
-    DataStruct->Az = DataStruct->Accel_Z_RAW / Accel_Z_corrector;
+    DataStruct->Ax = DataStruct->Accel_X_RAW * AccelRawToG;
+    DataStruct->Ay = DataStruct->Accel_Y_RAW * AccelRawToG;
+    DataStruct->Az = DataStruct->Accel_Z_RAW * AccelZCorrector;
 }
 
 void MPU6050_Read_Gyro(I2C_HandleTypeDef *I2Cx, MPU6050_t *DataStruct)
@@ -137,9 +138,9 @@ void MPU6050_Read_All(I2C_HandleTypeDef *I2Cx, MPU6050_t *DataStruct)
     DataStruct->Gyro_Y_RAW = (int16_t)(Rec_Data[10] << 8 | Rec_Data[11]);
     DataStruct->Gyro_Z_RAW = (int16_t)(Rec_Data[12] << 8 | Rec_Data[13]);
 
-    DataStruct->Ax = DataStruct->Accel_X_RAW / 16384.0;
-    DataStruct->Ay = DataStruct->Accel_Y_RAW / 16384.0;
-    DataStruct->Az = DataStruct->Accel_Z_RAW / Accel_Z_corrector;
+    DataStruct->Ax = DataStruct->Accel_X_RAW * AccelRawToG;
+    DataStruct->Ay = DataStruct->Accel_Y_RAW * AccelRawToG;
+    DataStruct->Az = DataStruct->Accel_Z_RAW * AccelZCorrector;
     DataStruct->Temperature = (float)((int16_t)temp / (float)340.0 + (float)36.53);
     DataStruct->Gx = DataStruct->Gyro_X_RAW / 131.0;
     DataStruct->Gy = DataStruct->Gyro_Y_RAW / 131.0;
