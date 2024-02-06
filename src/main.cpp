@@ -13,30 +13,32 @@
 
 void SystemClock_Config(void);
 
+#define ODRV_AXIS0_CAN_ID 0x3 // ID of the Left axis
+#define ODRV_AXIS1_CAN_ID 0x1 // ID of the Right axis
+
 void handleCANRx(CANFrame& rxMsg){
     uint32_t odrvID  = rxMsg.id >> 5;
     uint32_t odrvCmd = rxMsg.id & 0b11111;
 
-    if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
+    if (odrvID == ODRV_AXIS1_CAN_ID && odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
     {
-        // TODO: There's something wrong with the scaling in getSignal I think....
         const auto encoderPos = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
         const auto encoderVel = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
 
         debugLogFmt("encoder_position:%.3f\n", encoderPos);
         debugLogFmt("encoder_velocity:%f\n", encoderVel);
-
-        // Note: this is an "async" call. Axis will reply with Voltage+Current right after
-        // If HAL_Delay() is set too long in the loop, new CAN messages will overwrite this one
-        // axis0.getBusVoltageCurrent();
     }
 
-    if (odrvID == 3 && odrvCmd == ODrive::AxisCommand::GET_BUS_VOLTAGE_CURRENT)
+    if (odrvCmd == ODrive::AxisCommand::GET_BUS_VOLTAGE_CURRENT)
     {
-        const auto busVoltage = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
-        // const auto busCurrent = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
-
+        const auto busVoltage  = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
         debugLogFmt("bus_voltage:%.3f\n", busVoltage);
+    }
+
+    if (odrvID == ODRV_AXIS1_CAN_ID && odrvCmd == ODrive::AxisCommand::ODRIVE_HEARTBEAT_MESSAGE)
+    {
+        const auto axisError = can_getSignal<uint32_t>(rxMsg, 0, 32, true);
+        // debugLogFmt("dbg_msg:HrtBt %d\n", axisError);
     }
 }
 
@@ -46,26 +48,26 @@ struct CommandHandler{
 
     ODrive::ControlMode m_controlMode;
 
-    void handleMasterCmd(const std::string& strRx, ODrive::Axis& axis0){
+    void handleMasterCmd(const std::string& strRx, ODrive::Axis& axis){
         // Control State
         if (strRx.compare("calib_rtn") == 0)
         {
-            axis0.clearErrors();
-            axis0.setRequestedState(ODrive::AxisState::FULL_CALIBRATION_SEQUENCE);
+            axis.clearErrors();
+            axis.setRequestedState(ODrive::AxisState::FULL_CALIBRATION_SEQUENCE);
 
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
         }
         else if (strRx.compare("ClLp_ctrl") == 0)
         {
-            axis0.setRequestedState(ODrive::AxisState::CLOSED_LOOP_CONTROL);
+            axis.setRequestedState(ODrive::AxisState::CLOSED_LOOP_CONTROL);
 
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
         }
         else if (strRx.compare("idle_ctrl") == 0)
         {
-            axis0.setRequestedState(ODrive::AxisState::IDLE);
+            axis.setRequestedState(ODrive::AxisState::IDLE);
 
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
@@ -76,14 +78,14 @@ struct CommandHandler{
         {
             m_controlMode = ODrive::ControlMode::POSITION_CONTROL;
 
-            axis0.setControllerModes(m_controlMode);
+            axis.setControllerModes(m_controlMode);
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
         }
         else if (strRx.compare("velo_ctrl") == 0)
         {
             m_controlMode = ODrive::ControlMode::VELOCITY_CONTROL;
-            axis0.setControllerModes(m_controlMode);
+            axis.setControllerModes(m_controlMode);
 
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
@@ -91,7 +93,7 @@ struct CommandHandler{
         else if (strRx.compare("torq_ctrl") == 0)
         {
             m_controlMode = ODrive::ControlMode::TORQUE_CONTROL;
-            axis0.setControllerModes(m_controlMode);
+            axis.setControllerModes(m_controlMode);
 
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
@@ -99,12 +101,13 @@ struct CommandHandler{
         else if (strRx.compare("volt_ctrl") == 0)
         {
             m_controlMode = ODrive::ControlMode::VOLTAGE_CONTROL;
-            axis0.setControllerModes(m_controlMode);
+            axis.setControllerModes(m_controlMode);
 
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
         }
-
+        
+        // Setpoint
         else if (strRx.find("sp:")!=std::string::npos)
         {
             const auto sp = strRx.substr(3);
@@ -112,15 +115,15 @@ struct CommandHandler{
 
             if (m_controlMode == ODrive::ControlMode::POSITION_CONTROL)
             {
-                axis0.setInputPos(setpoint, 0, 0);
+                axis.setInputPos(setpoint, 0, 0);
             }
             else if (m_controlMode == ODrive::ControlMode::VELOCITY_CONTROL)
             {
-                axis0.setInputVel(setpoint, 0.0f);
+                axis.setInputVel(setpoint, 0.0f);
             }
             else if (m_controlMode == ODrive::ControlMode::TORQUE_CONTROL)
             {
-                axis0.setInputTorque(setpoint);
+                axis.setInputTorque(setpoint);
             }
             else if (m_controlMode == ODrive::ControlMode::VOLTAGE_CONTROL)
             {
@@ -181,11 +184,17 @@ int main(void)
     }
 
     // Ensure MPU6050 is up and running
-    debugLog("dbg_msg:Initializing MPU6050\n");
-    while (MPU6050_Init(&hi2c1) == 1);
-    debugLog("dbg_msg:MPU6050 online\n");
+    // debugLog("dbg_msg:Initializing MPU6050\n");
+    // while (MPU6050_Init(&hi2c1) == 1)
+    // {
+    //     debugLog("dbg_msg:MPU6050offline\n");
+    //     HAL_Delay(200);
+    // }
+    // debugLog("dbg_msg:MPU6050 online\n");
 
-    auto mpu6050Data = MPU6050_t{};
+    // auto mpu6050Data = MPU6050_t{};
+
+    debugLog("dbg_msg:STM32 online\n");
 
     // Initialize MCP2515
     auto mcp2515 = MCP2515(&hspi1);
@@ -193,7 +202,6 @@ int main(void)
     MCP2515::ERROR _e;
     _e = mcp2515.reset();
     _e = mcp2515.setBitrate(CAN_250KBPS, MCP_8MHZ);
-    // _e = mcp2515.setLoopbackMode();
     _e = mcp2515.setNormalMode();
 
     if (_e != MCP2515::ERROR_OK)
@@ -202,16 +210,27 @@ int main(void)
     }
     debugLog("dbg_msg:MCP2515 online\n");
 
-    // Request Bus Voltage
-    ODrive::Axis axis0(0x3, mcp2515);
+    // Set up safely, to be idle and in position control mode
+    ODrive::Axis axis0(ODRV_AXIS0_CAN_ID, mcp2515);
     axis0.setRequestedState(ODrive::AxisState::IDLE);
     axis0.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
-    axis0.setLimits(20.0f, 10.0f);
+    axis0.getBusVoltageCurrent();
+    axis0.setLimits(4.0f, 10.0f);
+    axis0.clearErrors();
+
+    ODrive::Axis axis1(ODRV_AXIS1_CAN_ID, mcp2515);
+    axis1.setRequestedState(ODrive::AxisState::IDLE);
+    axis1.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
+    axis1.getBusVoltageCurrent();
+    axis1.setLimits(20.0f, 10.0f);
+    axis1.clearErrors();
+    axis1.setPositionGain(5.0f);
+    axis1.setVelGains(0.05f, 0.0f);
+
+    debugLog("dbg_msg:ODrive online\n");
 
     HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
     CANFrame canFrameRx;
-
-    debugLog("dbg_msg:STM32 online\n");
 
     auto cmdHandler = CommandHandler();
     while (1)
@@ -221,26 +240,25 @@ int main(void)
             receivedData = false;
             std::string strRx = "";
             for (const auto& element : RxBuf) {
-                // convert each element to its ASCII representation and append to string
+                // Convert each element to its ASCII representation and append to string
                 strRx += static_cast<char>(element);
             }
             
-            cmdHandler.handleMasterCmd(strRx, axis0);           
+            cmdHandler.handleMasterCmd(strRx, axis1);           
+            // cmdHandler.handleMasterCmd(strRx, axis0);     
         }
 
         if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
         {
             handleCANRx(canFrameRx);
-            // axis0.getBusVoltageCurrent();
         }
 
-        MPU6050_Read_All(&hi2c1, &mpu6050Data);
+        // MPU6050_Read_All(&hi2c1, &mpu6050Data);
         // debugLogFmt("g_x:%.3f, g_y:%.3f, g_z:%.3f\n", mpu6050Data.Gx, mpu6050Data.Gy, mpu6050Data.Gz);
         // debugLogFmt("a_x:%.3f, a_y:%.3f, a_z:%.3f\n", mpu6050Data.Ax, mpu6050Data.Ay, mpu6050Data.Az);
-        debugLogFmt("K_x:%.3f, K_y:%.3f\n", mpu6050Data.KalmanAngleX, mpu6050Data.KalmanAngleY);
+        // debugLogFmt("K_x:%.3f, K_y:%.3f\n", mpu6050Data.KalmanAngleX, mpu6050Data.KalmanAngleY);
 
-        // debugLog("dbg_msg:Hello World\n");
-        HAL_Delay(100);
+        // HAL_Delay(100);
     }
 }
 

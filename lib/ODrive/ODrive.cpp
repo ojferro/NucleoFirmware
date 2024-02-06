@@ -170,7 +170,6 @@ void ODrive::Axis::getEncoderCount(){
 void ODrive::Axis::getBusVoltageCurrent(){
 	auto canFrame = odriveCANFrame(AxisCommand::GET_BUS_VOLTAGE_CURRENT, 0, false, true);
 	m_mcp2515.sendMessage(&canFrame);
-	
 }
 
 void ODrive::Axis::getIQ(){

@@ -199,7 +199,7 @@ bool InitializeHardware(){
     DMA_Init();
     const bool spi1_status  = SPI1_Init();
     const bool uart2_status = USART2_Init();
-    const bool i2c_status   = I2C_Init();
+    // const bool i2c_status   = I2C_Init();
 
-    return spi1_status && uart2_status && i2c_status;
+    return spi1_status && uart2_status;// && i2c_status;
 }
