@@ -13,6 +13,7 @@
 
 void SystemClock_Config(void);
 
+// Define CAN IDs of the Axes. Not to be confused with the encoder SPI CS ports.
 #define ODRV_AXIS0_CAN_ID 0x3 // ID of the Left axis
 #define ODRV_AXIS1_CAN_ID 0x1 // ID of the Right axis
 
@@ -20,7 +21,7 @@ void handleCANRx(CANFrame& rxMsg){
     uint32_t odrvID  = rxMsg.id >> 5;
     uint32_t odrvCmd = rxMsg.id & 0b11111;
 
-    if (odrvID == ODRV_AXIS1_CAN_ID && odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
+    if (/*odrvID == ODRV_AXIS0_CAN_ID &&*/ odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
     {
         const auto encoderPos = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
         const auto encoderVel = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
@@ -215,8 +216,10 @@ int main(void)
     axis0.setRequestedState(ODrive::AxisState::IDLE);
     axis0.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
     axis0.getBusVoltageCurrent();
-    axis0.setLimits(4.0f, 10.0f);
+    axis0.setLimits(20.0f, 10.0f);
     axis0.clearErrors();
+    axis0.setPositionGain(3.0f);
+    axis0.setVelGains(0.04f, 0.0f);
 
     ODrive::Axis axis1(ODRV_AXIS1_CAN_ID, mcp2515);
     axis1.setRequestedState(ODrive::AxisState::IDLE);
@@ -224,8 +227,8 @@ int main(void)
     axis1.getBusVoltageCurrent();
     axis1.setLimits(20.0f, 10.0f);
     axis1.clearErrors();
-    axis1.setPositionGain(5.0f);
-    axis1.setVelGains(0.05f, 0.0f);
+    axis1.setPositionGain(3.0f);
+    axis1.setVelGains(0.04f, 0.0f);
 
     debugLog("dbg_msg:ODrive online\n");
 
@@ -245,7 +248,7 @@ int main(void)
             }
             
             cmdHandler.handleMasterCmd(strRx, axis1);           
-            // cmdHandler.handleMasterCmd(strRx, axis0);     
+            cmdHandler.handleMasterCmd(strRx, axis0);   
         }
 
         if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
