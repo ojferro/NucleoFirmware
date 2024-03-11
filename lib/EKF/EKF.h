@@ -26,13 +26,13 @@ struct Euler
 struct EKFConfig
 {
     float procCovariance = 0.001;
-    float rAcc = 0.08f;
+    float rAcc = 0.02f;
     float rGyro = 0.0016f;
 
     float alpha = 0.9;
     float gyroBiasX = 0.023461514634847795f;
     float gyroBiasY = 0.032662799032722976f;
-    float gyroBiasZ = 0.025085952195352697f;
+    float gyroBiasZ = -0.0199140478046473f;
 
 // Means
 // XDown
