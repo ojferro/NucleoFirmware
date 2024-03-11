@@ -162,10 +162,15 @@ void EKF::H(const Eigen::Vector<float, 4>& qEst, Eigen::Matrix<float,3,4>& HOut)
 void EKF::StepEKFLoop(Quaternion& qOut){
 
     const auto tick_ms = HAL_GetTick();
-    const auto dt_s = (tick_ms - m_prevTick_ms)/1000.0f;
+    auto dt_s = (tick_ms - m_prevTick_ms)/1000.0f;
 
-    debugLogFmt("dbg_msg: dt %.3f\n", dt_s);
     m_prevTick_ms = tick_ms;
+
+    if (dt_s > 0.1)
+    {
+        debugLogFmt("WARNING: EKF iteration time too long. dt=%.3fs. Integration not accurate. Using dt=0.01s.");
+        dt_s = 0.01;
+    }
 
     // const auto dt_s = 0.01;
 
