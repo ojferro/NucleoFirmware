@@ -1,0 +1,60 @@
+// This file is part of Eigen, a lightweight C++ template library
+// for linear algebra.
+//
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+#ifndef EIGEN_EIGENVALUES_MODULE_H
+#define EIGEN_EIGENVALUES_MODULE_H
+
+#include "Core"
+
+#include "Cholesky"
+#include "Jacobi"
+#include "Householder"
+#include "LU"
+#include "Geometry"
+
+#include "source/Core/util/DisableStupidWarnings.h"
+
+/** \defgroup Eigenvalues_Module Eigenvalues module
+  *
+  *
+  *
+  * This module mainly provides various eigenvalue solvers.
+  * This module also provides some MatrixBase methods, including:
+  *  - MatrixBase::eigenvalues(),
+  *  - MatrixBase::operatorNorm()
+  *
+  * \code
+  * #include <Eigen/Eigenvalues>
+  * \endcode
+  */
+
+#include "source/misc/RealSvd2x2.h"
+#include "source/Eigenvalues/Tridiagonalization.h"
+#include "source/Eigenvalues/RealSchur.h"
+#include "source/Eigenvalues/EigenSolver.h"
+#include "source/Eigenvalues/SelfAdjointEigenSolver.h"
+#include "source/Eigenvalues/GeneralizedSelfAdjointEigenSolver.h"
+#include "source/Eigenvalues/HessenbergDecomposition.h"
+#include "source/Eigenvalues/ComplexSchur.h"
+#include "source/Eigenvalues/ComplexEigenSolver.h"
+#include "source/Eigenvalues/RealQZ.h"
+#include "source/Eigenvalues/GeneralizedEigenSolver.h"
+#include "source/Eigenvalues/MatrixBaseEigenvalues.h"
+#ifdef EIGEN_USE_LAPACKE
+#ifdef EIGEN_USE_MKL
+#include "mkl_lapacke.h"
+#else
+#include "source/misc/lapacke.h"
+#endif
+#include "source/Eigenvalues/RealSchur_LAPACKE.h"
+#include "source/Eigenvalues/ComplexSchur_LAPACKE.h"
+#include "source/Eigenvalues/SelfAdjointEigenSolver_LAPACKE.h"
+#endif
+
+#include "source/Core/util/ReenableStupidWarnings.h"
+
+#endif // EIGEN_EIGENVALUES_MODULE_H

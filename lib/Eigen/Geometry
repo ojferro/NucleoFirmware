@@ -1,0 +1,59 @@
+// This file is part of Eigen, a lightweight C++ template library
+// for linear algebra.
+//
+// This Source Code Form is subject to the terms of the Mozilla
+// Public License v. 2.0. If a copy of the MPL was not distributed
+// with this file, You can obtain one at http://mozilla.org/MPL/2.0/.
+
+#ifndef EIGEN_GEOMETRY_MODULE_H
+#define EIGEN_GEOMETRY_MODULE_H
+
+#include "Core"
+
+#include "SVD"
+#include "LU"
+#include <limits>
+
+#include "source/Core/util/DisableStupidWarnings.h"
+
+/** \defgroup Geometry_Module Geometry module
+  *
+  * This module provides support for:
+  *  - fixed-size homogeneous transformations
+  *  - translation, scaling, 2D and 3D rotations
+  *  - \link Quaternion quaternions \endlink
+  *  - cross products (\ref MatrixBase::cross, \ref MatrixBase::cross3)
+  *  - orthognal vector generation (\ref MatrixBase::unitOrthogonal)
+  *  - some linear components: \link ParametrizedLine parametrized-lines \endlink and \link Hyperplane hyperplanes \endlink
+  *  - \link AlignedBox axis aligned bounding boxes \endlink
+  *  - \link umeyama least-square transformation fitting \endlink
+  *
+  * \code
+  * #include <Eigen/Geometry>
+  * \endcode
+  */
+
+#include "source/Geometry/OrthoMethods.h"
+#include "source/Geometry/EulerAngles.h"
+
+#include "source/Geometry/Homogeneous.h"
+#include "source/Geometry/RotationBase.h"
+#include "source/Geometry/Rotation2D.h"
+#include "source/Geometry/Quaternion.h"
+#include "source/Geometry/AngleAxis.h"
+#include "source/Geometry/Transform.h"
+#include "source/Geometry/Translation.h"
+#include "source/Geometry/Scaling.h"
+#include "source/Geometry/Hyperplane.h"
+#include "source/Geometry/ParametrizedLine.h"
+#include "source/Geometry/AlignedBox.h"
+#include "source/Geometry/Umeyama.h"
+
+// Use the SSE optimized version whenever possible.
+#if (defined EIGEN_VECTORIZE_SSE) || (defined EIGEN_VECTORIZE_NEON)
+#include "source/Geometry/arch/Geometry_SIMD.h"
+#endif
+
+#include "source/Core/util/ReenableStupidWarnings.h"
+
+#endif // EIGEN_GEOMETRY_MODULE_H

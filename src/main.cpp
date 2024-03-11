@@ -1,6 +1,7 @@
 #include "stm32f4xx_hal.h"
 #include "mcp2515.hpp"
 #include "mpu6050.hpp"
+#include "EKF.h"
 #include "ODrive.hpp"
 #include "string.h"
 #include "Logger.h"
@@ -21,25 +22,43 @@ void handleCANRx(CANFrame& rxMsg){
     uint32_t odrvID  = rxMsg.id >> 5;
     uint32_t odrvCmd = rxMsg.id & 0b11111;
 
-    if (/*odrvID == ODRV_AXIS0_CAN_ID &&*/ odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
+    if (odrvCmd == ODrive::AxisCommand::ENCODER_ESTIMATES)
     {
         const auto encoderPos = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
         const auto encoderVel = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
 
-        debugLogFmt("encoder_position:%.3f\n", encoderPos);
-        debugLogFmt("encoder_velocity:%f\n", encoderVel);
+        if (odrvID == ODRV_AXIS0_CAN_ID)
+        {
+            debugLogFmt("encoder_position_0:%.3f\n", encoderPos);
+            debugLogFmt("encoder_velocity_0:%f\n", encoderVel);
+        }
+        else if (odrvID == ODRV_AXIS1_CAN_ID)
+        {
+            debugLogFmt("encoder_position_1:%.3f\n", encoderPos);
+            debugLogFmt("encoder_velocity_1:%f\n", encoderVel);
+        }
     }
 
     if (odrvCmd == ODrive::AxisCommand::GET_BUS_VOLTAGE_CURRENT)
     {
         const auto busVoltage  = can_getSignal<float>(rxMsg, 0, 32, true, 1, 0);
+        const auto busCurrent  = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
         debugLogFmt("bus_voltage:%.3f\n", busVoltage);
+        debugLogFmt("bus_current:%.3f\n", busCurrent);
+        debugLogFmt("dbg_msg: Current: %.3f\n", busCurrent);
     }
 
-    if (odrvID == ODRV_AXIS1_CAN_ID && odrvCmd == ODrive::AxisCommand::ODRIVE_HEARTBEAT_MESSAGE)
+    if (odrvCmd == ODrive::AxisCommand::ODRIVE_HEARTBEAT_MESSAGE)
     {
         const auto axisError = can_getSignal<uint32_t>(rxMsg, 0, 32, true);
-        // debugLogFmt("dbg_msg:HrtBt %d\n", axisError);
+        if (axisError != 0)
+        {
+            if (odrvID == ODRV_AXIS0_CAN_ID)
+                debugLogFmt("dbg_msg:Axis0 Err Code: %d\n", axisError);
+
+            if (odrvID == ODRV_AXIS1_CAN_ID)
+                debugLogFmt("dbg_msg:Axis1 Err Code: %d\n", axisError);
+        }
     }
 }
 
@@ -55,6 +74,13 @@ struct CommandHandler{
         {
             axis.clearErrors();
             axis.setRequestedState(ODrive::AxisState::FULL_CALIBRATION_SEQUENCE);
+
+            const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
+            debugLog(dbg_msg.c_str());
+        }
+        else if (strRx.compare("clear_err") == 0)
+        {
+            axis.clearErrors();
 
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
@@ -185,15 +211,15 @@ int main(void)
     }
 
     // Ensure MPU6050 is up and running
-    // debugLog("dbg_msg:Initializing MPU6050\n");
-    // while (MPU6050_Init(&hi2c1) == 1)
-    // {
-    //     debugLog("dbg_msg:MPU6050offline\n");
-    //     HAL_Delay(200);
-    // }
-    // debugLog("dbg_msg:MPU6050 online\n");
+    debugLog("dbg_msg:Initializing MPU6050\n");
+    while (MPU6050_Init(&hi2c1) == 1)
+    {
+        debugLog("dbg_msg:MPU6050 offline\n");
+        HAL_Delay(200);
+    }
+    debugLog("dbg_msg:MPU6050 online\n");
 
-    // auto mpu6050Data = MPU6050_t{};
+    auto mpu6050Data = MPU6050_t{};
 
     debugLog("dbg_msg:STM32 online\n");
 
@@ -216,24 +242,29 @@ int main(void)
     axis0.setRequestedState(ODrive::AxisState::IDLE);
     axis0.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
     axis0.getBusVoltageCurrent();
-    axis0.setLimits(20.0f, 10.0f);
+    axis0.setLimits(200.0f, 10.0f);
     axis0.clearErrors();
-    axis0.setPositionGain(3.0f);
-    axis0.setVelGains(0.04f, 0.0f);
+    axis0.setPositionGain(20.0f);
+    axis0.setVelGains(0.05f, 0.001f);
 
     ODrive::Axis axis1(ODRV_AXIS1_CAN_ID, mcp2515);
-    axis1.setRequestedState(ODrive::AxisState::IDLE);
-    axis1.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
+    // axis1.setRequestedState(ODrive::AxisState::IDLE);
+    // axis1.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
     axis1.getBusVoltageCurrent();
-    axis1.setLimits(20.0f, 10.0f);
-    axis1.clearErrors();
-    axis1.setPositionGain(3.0f);
-    axis1.setVelGains(0.04f, 0.0f);
+    // axis1.setLimits(200.0f, 10.0f);
+    // axis1.clearErrors();
+    // axis1.setPositionGain(20.0f);
+    // axis1.setVelGains(0.05f, 0.001f);
 
     debugLog("dbg_msg:ODrive online\n");
 
     HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
     CANFrame canFrameRx;
+
+    const auto ekfConfig = EKFConfig{};
+    auto qEst = Quaternion{};
+    auto eulerEst = Euler{};
+    auto ekf = EKF(&hi2c1, ekfConfig);
 
     auto cmdHandler = CommandHandler();
     while (1)
@@ -247,8 +278,11 @@ int main(void)
                 strRx += static_cast<char>(element);
             }
             
-            cmdHandler.handleMasterCmd(strRx, axis1);           
+            // cmdHandler.handleMasterCmd(strRx, axis1);           
             cmdHandler.handleMasterCmd(strRx, axis0);   
+
+            axis0.getBusVoltageCurrent();
+            axis1.getBusVoltageCurrent();
         }
 
         if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
@@ -256,9 +290,30 @@ int main(void)
             handleCANRx(canFrameRx);
         }
 
+
+        ekf.StepEKFLoop(qEst);
+        ekf.QuaternionToEuler(qEst, eulerEst);
+        debugLogFmt("imu_r:%.6f\n", eulerEst.roll);
+        debugLogFmt("imu_p:%.6f\n", eulerEst.pitch);
+        debugLogFmt("imu_y:%.6f\n", eulerEst.yaw);
+        // debugLogFmt("imu_w:%.3f\n", qEst.w);
+        // debugLogFmt("imu_x:%.3f\n", qEst.x);
+        // debugLogFmt("imu_y:%.3f\n", qEst.y);
+        // debugLogFmt("imu_z:%.3f\n", qEst.z);
+
+        debugLogFmt("dbg_msg:quaternion,%.3f,%.3f,%.3f,%.3f,\n", qEst.w, qEst.x, qEst.y, qEst.z);
+
+
         // MPU6050_Read_All(&hi2c1, &mpu6050Data);
         // debugLogFmt("g_x:%.3f, g_y:%.3f, g_z:%.3f\n", mpu6050Data.Gx, mpu6050Data.Gy, mpu6050Data.Gz);
         // debugLogFmt("a_x:%.3f, a_y:%.3f, a_z:%.3f\n", mpu6050Data.Ax, mpu6050Data.Ay, mpu6050Data.Az);
+
+        // debugLogFmt("acc_x,%.16f\n", mpu6050Data.Ax);
+        // debugLogFmt("acc_y,%.16f\n", mpu6050Data.Ay);
+        // debugLogFmt("acc_z,%.16f\n", mpu6050Data.Az);
+        // debugLogFmt("gyr_x,%.16f\n", mpu6050Data.Gx);
+        // debugLogFmt("gyr_y,%.16f\n", mpu6050Data.Gy);
+        // debugLogFmt("gyr_z,%.16f\n", mpu6050Data.Gz);
         // debugLogFmt("K_x:%.3f, K_y:%.3f\n", mpu6050Data.KalmanAngleX, mpu6050Data.KalmanAngleY);
 
         // HAL_Delay(100);
