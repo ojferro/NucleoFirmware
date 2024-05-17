@@ -15,8 +15,11 @@
 void SystemClock_Config(void);
 
 // Define CAN IDs of the Axes. Not to be confused with the encoder SPI CS ports.
-#define ODRV_AXIS0_CAN_ID 0x3 // ID of the Left axis
+#define ODRV_AXIS0_CAN_ID 0x0 // ID of the Left axis
 #define ODRV_AXIS1_CAN_ID 0x1 // ID of the Right axis
+
+// uint32_t encoder_count_0 = 0u;
+// uint32_t encoder_count_1 = 0u;
 
 void handleCANRx(CANFrame& rxMsg){
     uint32_t odrvID  = rxMsg.id >> 5;
@@ -29,13 +32,19 @@ void handleCANRx(CANFrame& rxMsg){
 
         if (odrvID == ODRV_AXIS0_CAN_ID)
         {
-            debugLogFmt("encoder_position_0:%.3f\n", encoderPos);
-            debugLogFmt("encoder_velocity_0:%f\n", encoderVel);
+            // encoder_count_0++;
+            debugLogFmt("enc_pos_0:%.3f\n", encoderPos);
+            debugLogFmt("enc_vel_0:%f\n", encoderVel);
+
+            // debugLogFmt("dbg_msg: encoder pos 0 : %d\n", rxMsg.data[0]);
+
+            // debugLogFmt("dbg_msg: encoder pos 0 : %.3f\n", encoderPos);
         }
         else if (odrvID == ODRV_AXIS1_CAN_ID)
         {
-            debugLogFmt("encoder_position_1:%.3f\n", encoderPos);
-            debugLogFmt("encoder_velocity_1:%f\n", encoderVel);
+            // encoder_count_1++;
+            debugLogFmt("enc_pos_1:%.3f\n", encoderPos);
+            debugLogFmt("enc_vel_1:%f\n", encoderVel);
         }
     }
 
@@ -46,6 +55,8 @@ void handleCANRx(CANFrame& rxMsg){
         debugLogFmt("bus_voltage:%.3f\n", busVoltage);
         debugLogFmt("bus_current:%.3f\n", busCurrent);
         debugLogFmt("dbg_msg: Current: %.3f\n", busCurrent);
+
+        // debugLogFmt("dbg_msg: Encoder counts: Axis 0: %d, Axis 1: %d\n", encoder_count_0, encoder_count_1);
     }
 
     if (odrvCmd == ODrive::AxisCommand::ODRIVE_HEARTBEAT_MESSAGE)
@@ -68,7 +79,7 @@ struct CommandHandler{
 
     ODrive::ControlMode m_controlMode;
 
-    void handleMasterCmd(const std::string& strRx, ODrive::Axis& axis){
+    void handleMasterCmd(const std::string& strRx, ODrive::Axis& axis, bool flipSetpoint = false){
         // Control State
         if (strRx.compare("calib_rtn") == 0)
         {
@@ -138,7 +149,8 @@ struct CommandHandler{
         else if (strRx.find("sp:")!=std::string::npos)
         {
             const auto sp = strRx.substr(3);
-            const auto setpoint = std::stof(sp);
+            auto setpoint = std::stof(sp);
+            setpoint = flipSetpoint ? -setpoint : setpoint;
 
             if (m_controlMode == ODrive::ControlMode::POSITION_CONTROL)
             {
@@ -228,7 +240,7 @@ int main(void)
 
     MCP2515::ERROR _e;
     _e = mcp2515.reset();
-    _e = mcp2515.setBitrate(CAN_250KBPS, MCP_8MHZ);
+    _e = mcp2515.setBitrate(CAN_500KBPS, MCP_8MHZ);
     _e = mcp2515.setNormalMode();
 
     if (_e != MCP2515::ERROR_OK)
@@ -248,13 +260,13 @@ int main(void)
     axis0.setVelGains(0.05f, 0.001f);
 
     ODrive::Axis axis1(ODRV_AXIS1_CAN_ID, mcp2515);
-    // axis1.setRequestedState(ODrive::AxisState::IDLE);
-    // axis1.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
+    axis1.setRequestedState(ODrive::AxisState::IDLE);
+    axis1.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
     axis1.getBusVoltageCurrent();
-    // axis1.setLimits(200.0f, 10.0f);
-    // axis1.clearErrors();
-    // axis1.setPositionGain(20.0f);
-    // axis1.setVelGains(0.05f, 0.001f);
+    axis1.setLimits(200.0f, 10.0f);
+    axis1.clearErrors();
+    axis1.setPositionGain(20.0f);
+    axis1.setVelGains(0.05f, 0.001f);
 
     debugLog("dbg_msg:ODrive online\n");
 
@@ -278,11 +290,11 @@ int main(void)
                 strRx += static_cast<char>(element);
             }
             
-            // cmdHandler.handleMasterCmd(strRx, axis1);           
-            cmdHandler.handleMasterCmd(strRx, axis0);   
+            cmdHandler.handleMasterCmd(strRx, axis0);
+            cmdHandler.handleMasterCmd(strRx, axis1, true);
 
             axis0.getBusVoltageCurrent();
-            axis1.getBusVoltageCurrent();
+            // axis1.getBusVoltageCurrent();
         }
 
         if (mcp2515.readMessage(&canFrameRx) == MCP2515::ERROR_OK)
@@ -301,7 +313,7 @@ int main(void)
         // debugLogFmt("imu_y:%.3f\n", qEst.y);
         // debugLogFmt("imu_z:%.3f\n", qEst.z);
 
-        debugLogFmt("dbg_msg:quaternion,%.3f,%.3f,%.3f,%.3f,\n", qEst.w, qEst.x, qEst.y, qEst.z);
+        // debugLogFmt("dbg_msg:quaternion,%.3f,%.3f,%.3f,%.3f,\n", qEst.w, qEst.x, qEst.y, qEst.z);
 
 
         // MPU6050_Read_All(&hi2c1, &mpu6050Data);
