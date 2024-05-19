@@ -1,4 +1,7 @@
 #include "stm32f4xx_hal.h"
+#include <algorithm>
+#include "LQR.h"
+#include "Controller.h"
 #include "mcp2515.hpp"
 #include "mpu6050.hpp"
 #include "EKF.h"
@@ -18,8 +21,10 @@ void SystemClock_Config(void);
 #define ODRV_AXIS0_CAN_ID 0x0 // ID of the Left axis
 #define ODRV_AXIS1_CAN_ID 0x1 // ID of the Right axis
 
-// uint32_t encoder_count_0 = 0u;
-// uint32_t encoder_count_1 = 0u;
+float enc_pos_0 = 0.0f;
+float enc_vel_0 = 0.0f;
+float enc_pos_1 = 0.0f;
+float enc_vel_1 = 0.0f;
 
 void handleCANRx(CANFrame& rxMsg){
     uint32_t odrvID  = rxMsg.id >> 5;
@@ -32,17 +37,22 @@ void handleCANRx(CANFrame& rxMsg){
 
         if (odrvID == ODRV_AXIS0_CAN_ID)
         {
-            // encoder_count_0++;
-            debugLogFmt("enc_pos_0:%.3f\n", encoderPos);
+            // Update state variables
+            enc_pos_0 = encoderPos;
+            enc_vel_0 = encoderVel;
+
+            // Transmit for visualization
+            const float wheelRadius = 0.03f;
+            debugLogFmt("enc_pos_0:%.3f\n", encoderPos * M_TWOPI * wheelRadius);
             debugLogFmt("enc_vel_0:%f\n", encoderVel);
-
-            // debugLogFmt("dbg_msg: encoder pos 0 : %d\n", rxMsg.data[0]);
-
-            // debugLogFmt("dbg_msg: encoder pos 0 : %.3f\n", encoderPos);
         }
         else if (odrvID == ODRV_AXIS1_CAN_ID)
         {
-            // encoder_count_1++;
+            // Update state variables
+            enc_pos_1 = encoderPos;
+            enc_vel_1 = encoderVel;
+
+            // Transmit for visualization
             debugLogFmt("enc_pos_1:%.3f\n", encoderPos);
             debugLogFmt("enc_vel_1:%f\n", encoderVel);
         }
@@ -54,9 +64,6 @@ void handleCANRx(CANFrame& rxMsg){
         const auto busCurrent  = can_getSignal<float>(rxMsg, 4, 32, true, 1, 0);
         debugLogFmt("bus_voltage:%.3f\n", busVoltage);
         debugLogFmt("bus_current:%.3f\n", busCurrent);
-        debugLogFmt("dbg_msg: Current: %.3f\n", busCurrent);
-
-        // debugLogFmt("dbg_msg: Encoder counts: Axis 0: %d, Axis 1: %d\n", encoder_count_0, encoder_count_1);
     }
 
     if (odrvCmd == ODrive::AxisCommand::ODRIVE_HEARTBEAT_MESSAGE)
@@ -110,6 +117,29 @@ struct CommandHandler{
             const auto dbg_msg = "dbg_msg: Sent "+strRx+" command\n";
             debugLog(dbg_msg.c_str());
         }
+        else if (strRx.compare("auto_ctrl") == 0)
+        {
+            // Initialize wheels to 0
+            axis.setRequestedState(ODrive::AxisState::CLOSED_LOOP_CONTROL);
+            axis.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
+            axis.setInputPos(0, 0, 0);
+
+            HAL_Delay(1000);
+            debugLog("dbg_msg: Zeroing wheels done.\n");
+
+            axis.setRequestedState(ODrive::AxisState::IDLE);
+
+            debugLog("dbg_msg: Starting closed loop torque control.\n");
+            HAL_Delay(500);
+
+            m_controlMode = ODrive::ControlMode::TORQUE_CONTROL;
+            axis.setControllerModes(m_controlMode);
+            axis.setRequestedState(ODrive::AxisState::CLOSED_LOOP_CONTROL);
+
+            axis.setInputTorque(0);
+
+            debugLog("dbg_msg: Torque control active.\n");
+        }
 
         // Control Modes
         else if (strRx.compare("posn_ctrl") == 0)
@@ -154,14 +184,17 @@ struct CommandHandler{
 
             if (m_controlMode == ODrive::ControlMode::POSITION_CONTROL)
             {
+                debugLogFmt("dbg_msg: Setting to POSITION_CONTROL\n");
                 axis.setInputPos(setpoint, 0, 0);
             }
             else if (m_controlMode == ODrive::ControlMode::VELOCITY_CONTROL)
             {
+                debugLogFmt("dbg_msg: Setting to VELOCITY_CONTROL\n");
                 axis.setInputVel(setpoint, 0.0f);
             }
             else if (m_controlMode == ODrive::ControlMode::TORQUE_CONTROL)
             {
+                debugLogFmt("dbg_msg: Setting to TORQUE_CONTROL\n");
                 axis.setInputTorque(setpoint);
             }
             else if (m_controlMode == ODrive::ControlMode::VOLTAGE_CONTROL)
@@ -179,6 +212,13 @@ struct CommandHandler{
         }
     }
 };
+
+template <typename T>
+T clamp(const T& value, const T& lower, const T& upper) {
+    if (value < lower) return lower;
+    if (value > upper) return upper;
+    return value;
+}
 
 
 // TODO: Remove this ugly global function, needed for DMA right now.
@@ -275,8 +315,14 @@ int main(void)
 
     const auto ekfConfig = EKFConfig{};
     auto qEst = Quaternion{};
+    auto filteredSensorData = FilteredSensorData{};
     auto eulerEst = Euler{};
     auto ekf = EKF(&hi2c1, ekfConfig);
+
+    // Control
+    auto controller = LQR();
+    Controller::U u = {0.0f, 0.0f};
+    Controller::State state = {0.0f, 0.0f, 0.0f, 0.0f};
 
     auto cmdHandler = CommandHandler();
     while (1)
@@ -293,7 +339,7 @@ int main(void)
             cmdHandler.handleMasterCmd(strRx, axis0);
             cmdHandler.handleMasterCmd(strRx, axis1, true);
 
-            axis0.getBusVoltageCurrent();
+            // axis0.getBusVoltageCurrent();
             // axis1.getBusVoltageCurrent();
         }
 
@@ -303,11 +349,36 @@ int main(void)
         }
 
 
-        ekf.StepEKFLoop(qEst);
+        ekf.StepEKFLoop(qEst, filteredSensorData);
         ekf.QuaternionToEuler(qEst, eulerEst);
-        debugLogFmt("imu_r:%.6f\n", eulerEst.roll);
+        debugLogFmt("imu_r:%.6f\n", (eulerEst.roll - 1.488) * 180.0f / M_PI);
         debugLogFmt("imu_p:%.6f\n", eulerEst.pitch);
         debugLogFmt("imu_y:%.6f\n", eulerEst.yaw);
+
+        // Run control loop
+
+        if (cmdHandler.m_controlMode == ODrive::ControlMode::TORQUE_CONTROL)
+        {
+            // Populate state
+            const auto wheelRadius = 0.03f; // meters
+            state[Controller::StateIndex::X] = enc_pos_0 * M_TWOPI * wheelRadius;
+            state[Controller::StateIndex::THETA] = eulerEst.roll - 1.488;//M_PI_2; // TODO: Fix this, but roll is along the "pitch" axis
+            state[Controller::StateIndex::X_DOT] = enc_vel_0 * M_TWOPI * wheelRadius;
+            state[Controller::StateIndex::THETA_DOT] = filteredSensorData.gyrX;
+
+            // Run controller
+            controller.iterate(u, state);
+
+            // Send the control signal to the ODrive
+            const auto maxTorque = 0.05f;
+            axis0.setInputTorque(clamp(u[0], -maxTorque, maxTorque));
+            axis1.setInputTorque(clamp(-u[1], -maxTorque, maxTorque));
+
+            // Transmit data for visualization
+            debugLogFmt("ctrl_u_0:%.6f\n", clamp(u[0], -maxTorque, maxTorque));
+        }
+        
+
         // debugLogFmt("imu_w:%.3f\n", qEst.w);
         // debugLogFmt("imu_x:%.3f\n", qEst.x);
         // debugLogFmt("imu_y:%.3f\n", qEst.y);

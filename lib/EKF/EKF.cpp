@@ -159,7 +159,7 @@ void EKF::H(const Eigen::Vector<float, 4>& qEst, Eigen::Matrix<float,3,4>& HOut)
     HOut = 2 * HOut;
 }
 
-void EKF::StepEKFLoop(Quaternion& qOut){
+void EKF::StepEKFLoop(Quaternion& qOut, FilteredSensorData& sensorData){
 
     const auto tick_ms = HAL_GetTick();
     auto dt_s = (tick_ms - m_prevTick_ms)/1000.0f;
@@ -168,7 +168,7 @@ void EKF::StepEKFLoop(Quaternion& qOut){
 
     if (dt_s > 0.1)
     {
-        debugLogFmt("WARNING: EKF iteration time too long. dt=%.3fs. Integration not accurate. Using dt=0.01s.");
+        debugLogFmt("WARNING: EKF iteration time too long. dt=%.3fs. Integration not accurate. Using dt=0.01s.", dt_s);
         dt_s = 0.01;
     }
 
@@ -196,9 +196,13 @@ void EKF::StepEKFLoop(Quaternion& qOut){
     // m_mpu6050Data.Gy = 4*cos(ctr/10.0);
     // m_mpu6050Data.Gz = 4*sin(ctr/7.777);
 
-    debugLogFmt("gyr_x:%.16f\n", m_mpu6050Data.Gx);
-    debugLogFmt("gyr_y:%.16f\n", m_mpu6050Data.Gy);
-    debugLogFmt("gyr_z:%.16f\n", m_mpu6050Data.Gz);
+    debugLogFmt("gyr_x:%.6f\n", m_mpu6050Data.Gx);
+    debugLogFmt("gyr_y:%.6f\n", m_mpu6050Data.Gy);
+    debugLogFmt("gyr_z:%.6f\n", m_mpu6050Data.Gz);
+
+    sensorData.gyrX = m_mpu6050Data.Gx;
+    sensorData.gyrY = m_mpu6050Data.Gy;
+    sensorData.gyrZ = m_mpu6050Data.Gz;
 
     // ConstructSkewMatrix(m_mpu6050Data.Gx, m_mpu6050Data.Gy, m_mpu6050Data.Gz, m_omegaSkew);
 
@@ -238,9 +242,13 @@ void EKF::StepEKFLoop(Quaternion& qOut){
     m_z << m_mpu6050Data.Ax, m_mpu6050Data.Ay, m_mpu6050Data.Az;
     m_z.normalize();
 
-    debugLogFmt("acc_x:%.16f\n", m_z[0]);
-    debugLogFmt("acc_y:%.16f\n", m_z[1]);
-    debugLogFmt("acc_z:%.16f\n", m_z[2]);
+    debugLogFmt("acc_x:%.6f\n", m_z[0]);
+    debugLogFmt("acc_y:%.6f\n", m_z[1]);
+    debugLogFmt("acc_z:%.6f\n", m_z[2]);
+
+    sensorData.accX = m_z[0];
+    sensorData.accY = m_z[1];
+    sensorData.accZ = m_z[2];
 
     // Compute estimated accelerometer measurement
     h(m_q, m_h);

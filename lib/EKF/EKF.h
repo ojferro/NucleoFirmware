@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include "stm32f4xx_hal.h"
 #include "Eigen"
+#include "Filter.h"
 #include "mpu6050.hpp"
 
 struct Quaternion
@@ -14,6 +15,16 @@ struct Quaternion
     float x;
     float y;
     float z;
+};
+
+struct FilteredSensorData
+{
+    float gyrX;
+    float gyrY;
+    float gyrZ;
+    float accX;
+    float accY;
+    float accZ;
 };
 
 struct Euler
@@ -73,7 +84,7 @@ class EKF{
     public:
         EKF(I2C_HandleTypeDef* mpu, const EKFConfig& config);
 
-        void StepEKFLoop(Quaternion& qOut);
+        void StepEKFLoop(Quaternion& qOut, FilteredSensorData& sensorData);
 
         void QuaternionToEuler(const Quaternion& q, Euler& e);
         void EulerToQuaternion(const Euler& e, Quaternion& q);
@@ -82,45 +93,6 @@ class EKF{
 
         void h(const Eigen::Vector<float, 4>& qEst, Eigen::Vector<float, 3>& hOut);
         void H(const Eigen::Vector<float, 4>& qEst, Eigen::Matrix<float,3,4>& HOut);
-
-        // First order filter for N channels
-        template <uint32_t N>
-        class Filter{
-            public:
-                Filter(){};
-
-                void Initialize(float alpha, std::array<float, N> sensorBiases)
-                {
-                    m_alpha = alpha;
-                    m_prevValues =std::array<float, N>{0.0f};
-                    m_sensorBiases = sensorBiases;
-                };
-
-                std::array<float, N> Apply(std::array<float, N> values)
-                {
-                    auto filteredValues = std::array<float, N>{};
-                    for (auto i = 0u; i < N; i++)
-                    {
-                        // Remove bias from the sensor reading
-                        const auto value = values[i] - m_sensorBiases[i];
-
-                        const auto filteredValue = m_alpha * value + (1.0f - m_alpha) * m_prevValues[i];
-                        m_prevValues[i] = value;
-
-                        filteredValues[i] = filteredValue;
-                    }
-
-                    return filteredValues;
-                };
-
-            private:
-                // Blending param, [1.0,0.0]   1 means unfiltered, 0.5 means equal weight to current and previous samples 
-                float m_alpha;
-                std::array<float, N> m_prevValues;
-
-                // Calibration params
-                std::array<float, N> m_sensorBiases;
-        };
 
         // Process noise covariance
         Eigen::Matrix<float, 4, 4> m_Q;
