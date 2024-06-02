@@ -4,7 +4,8 @@
 #include "Controller.h"
 #include "mcp2515.hpp"
 #include "mpu6050.hpp"
-#include "EKF.h"
+// #include "EKF.h"
+#include "ComplementaryFilter.h"
 #include "ODrive.hpp"
 #include "string.h"
 #include "Logger.h"
@@ -44,7 +45,7 @@ void handleCANRx(CANFrame& rxMsg){
             // Transmit for visualization
             const float wheelRadius = 0.03f;
             debugLogFmt("enc_pos_0:%.3f\n", encoderPos * M_TWOPI * wheelRadius);
-            debugLogFmt("enc_vel_0:%f\n", encoderVel);
+            debugLogFmt("enc_vel_0:%f\n", encoderVel * M_TWOPI * wheelRadius);
         }
         else if (odrvID == ODRV_AXIS1_CAN_ID)
         {
@@ -53,8 +54,9 @@ void handleCANRx(CANFrame& rxMsg){
             enc_vel_1 = encoderVel;
 
             // Transmit for visualization
-            debugLogFmt("enc_pos_1:%.3f\n", encoderPos);
-            debugLogFmt("enc_vel_1:%f\n", encoderVel);
+            const float wheelRadius = 0.03f;
+            debugLogFmt("enc_pos_1:%.3f\n", -encoderPos * M_TWOPI * wheelRadius);
+            debugLogFmt("enc_vel_1:%f\n", -encoderVel * M_TWOPI * wheelRadius);
         }
     }
 
@@ -271,7 +273,7 @@ int main(void)
     }
     debugLog("dbg_msg:MPU6050 online\n");
 
-    auto mpu6050Data = MPU6050_t{};
+    // auto mpu6050Data = MPU6050_t{};
 
     debugLog("dbg_msg:STM32 online\n");
 
@@ -313,11 +315,13 @@ int main(void)
     HAL_UARTEx_ReceiveToIdle_DMA(&huart2, RxBuf, RxBuf_SIZE);
     CANFrame canFrameRx;
 
-    const auto ekfConfig = EKFConfig{};
-    auto qEst = Quaternion{};
-    auto filteredSensorData = FilteredSensorData{};
-    auto eulerEst = Euler{};
-    auto ekf = EKF(&hi2c1, ekfConfig);
+    // const auto ekfConfig = EKFConfig{};
+    // auto qEst = Quaternion{};
+    // auto filteredSensorData = FilteredSensorData{};
+    // auto eulerEst = Euler{};
+    // auto ekf = EKF(&hi2c1, ekfConfig);
+
+    auto cf = ComplementaryFilter(&hi2c1);
 
     // Control
     auto controller = LQR();
@@ -349,11 +353,14 @@ int main(void)
         }
 
 
-        ekf.StepEKFLoop(qEst, filteredSensorData);
-        ekf.QuaternionToEuler(qEst, eulerEst);
-        debugLogFmt("imu_r:%.6f\n", (eulerEst.roll - 1.488) * 180.0f / M_PI);
-        debugLogFmt("imu_p:%.6f\n", eulerEst.pitch);
-        debugLogFmt("imu_y:%.6f\n", eulerEst.yaw);
+        // ekf.StepEKFLoop(qEst, filteredSensorData);
+        // ekf.QuaternionToEuler(qEst, eulerEst);
+
+        cf.Step();
+        // debugLogFmt("imu_r:%.6f\n", (eulerEst.roll - 1.488) * 180.0f / M_PI);
+        debugLogFmt("imu_r:%.6f\n", 0.0f);
+        debugLogFmt("imu_p:%.6f\n", cf.GetPitchAngle() * 180.0f / M_PI);
+        debugLogFmt("imu_y:%.6f\n", 0.0f);
 
         // Run control loop
 
@@ -362,9 +369,28 @@ int main(void)
             // Populate state
             const auto wheelRadius = 0.03f; // meters
             state[Controller::StateIndex::X] = enc_pos_0 * M_TWOPI * wheelRadius;
-            state[Controller::StateIndex::THETA] = eulerEst.roll - 1.488;//M_PI_2; // TODO: Fix this, but roll is along the "pitch" axis
+            state[Controller::StateIndex::THETA] = cf.GetPitchAngle();
             state[Controller::StateIndex::X_DOT] = enc_vel_0 * M_TWOPI * wheelRadius;
-            state[Controller::StateIndex::THETA_DOT] = filteredSensorData.gyrX;
+            state[Controller::StateIndex::THETA_DOT] = cf.GetPitchAngleDot();
+
+            // Failsafe in the event of wheels lifting (nothing to counteract torque)
+            // or robot falling over
+            if (abs(state[Controller::StateIndex::THETA] * 180.0 * M_1_PI) > 45.0f)
+            {
+                axis0.setInputTorque(0);
+                axis1.setInputTorque(0);
+
+                debugLog("dbg_msg:Robot is falling over. Stopping motors.\n");
+                continue;
+            }
+            else if (abs(state[Controller::StateIndex::X_DOT]) > 5.0f)
+            {
+                axis0.setInputTorque(0);
+                axis1.setInputTorque(0);
+
+                debugLog("dbg_msg:Max vel limit. Stopping motors.\n");
+                continue;
+            }
 
             // Run controller
             controller.iterate(u, state);
