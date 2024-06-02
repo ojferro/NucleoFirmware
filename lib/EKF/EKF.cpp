@@ -188,14 +188,6 @@ void EKF::StepEKFLoop(Quaternion& qOut, FilteredSensorData& sensorData){
     m_mpu6050Data.Gy = filteredGyro[1];
     m_mpu6050Data.Gz = filteredGyro[2];
 
-    //////////////////////////////////////
-    //////////////////////////////////////
-    // Debugging only: Mock out gyro data:
-    // ctr++;
-    // m_mpu6050Data.Gx = 4*sin(ctr/15.0f);
-    // m_mpu6050Data.Gy = 4*cos(ctr/10.0);
-    // m_mpu6050Data.Gz = 4*sin(ctr/7.777);
-
     debugLogFmt("gyr_x:%.6f\n", m_mpu6050Data.Gx);
     debugLogFmt("gyr_y:%.6f\n", m_mpu6050Data.Gy);
     debugLogFmt("gyr_z:%.6f\n", m_mpu6050Data.Gz);
@@ -203,11 +195,6 @@ void EKF::StepEKFLoop(Quaternion& qOut, FilteredSensorData& sensorData){
     sensorData.gyrX = m_mpu6050Data.Gx;
     sensorData.gyrY = m_mpu6050Data.Gy;
     sensorData.gyrZ = m_mpu6050Data.Gz;
-
-    // ConstructSkewMatrix(m_mpu6050Data.Gx, m_mpu6050Data.Gy, m_mpu6050Data.Gz, m_omegaSkew);
-
-    // m_trueq = m_trueq + 0.5 * dt_s * m_omegaSkew * m_trueq;
-    // m_trueq.normalize();
     //////////////////////////////////////
     //////////////////////////////////////
 
@@ -223,21 +210,6 @@ void EKF::StepEKFLoop(Quaternion& qOut, FilteredSensorData& sensorData){
     ////// MEASUREMENT UPDATE STEP //////
     // Get linear acceleration x, y, z
     ReadAccel(m_mpuHandle, &m_mpu6050Data);
-
-    //////////////////////////////////////
-    //////////////////////////////////////
-    // const auto rotMat = QuaternionToRotMatrix(m_trueq);
-    // const Eigen::Vector3f gravInBodyFrame = rotMat.transpose() * m_g;
-    // // Debugging only: Mock out accel data:
-    // m_mpu6050Data.Ax = gravInBodyFrame[0];
-    // m_mpu6050Data.Ay = gravInBodyFrame[1];
-    // m_mpu6050Data.Az = gravInBodyFrame[2];
-
-    // debugLogFmt("acc_x:%.16f\n", m_mpu6050Data.Ax);
-    // debugLogFmt("acc_y:%.16f\n", m_mpu6050Data.Ay);
-    // debugLogFmt("acc_z:%.16f\n", m_mpu6050Data.Az);
-    //////////////////////////////////////
-    //////////////////////////////////////
 
     m_z << m_mpu6050Data.Ax, m_mpu6050Data.Ay, m_mpu6050Data.Az;
     m_z.normalize();
