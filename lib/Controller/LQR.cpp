@@ -27,6 +27,7 @@ LQR::LQR(){
 
     // This one works great! The cable pulling it makes it not want to stay at x=0, but it stabilizes at another nonzero point.
     m_K = {0.70710678, 25.75388822,  1.46730009,  3.93888074};
+    // m_K = {0.0f, 133.57753537f, 0.99406482f, 32.41069964f};
     
 
 }

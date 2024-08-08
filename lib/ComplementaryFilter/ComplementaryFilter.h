@@ -41,6 +41,8 @@ class ComplementaryFilter{
 
         float m_pitchAngle = 0.0f;
         float m_pitchAngleDot = 0.0f;
+
+        float m_pitchAngleOffset = -4.9f * M_PI / 180.0f;
 };
 
 

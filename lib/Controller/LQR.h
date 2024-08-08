@@ -4,7 +4,6 @@
 #define _LQR_H_
 
 #include "Controller.h"
-#include "Eigen"
 #include "TemporalFilter.h"
 
 class LQR : public Controller{

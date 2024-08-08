@@ -18,19 +18,31 @@ namespace {
 
         // Gyroscope:
         const auto gx = -DataStruct->Gx;
-        const auto gy = -DataStruct->Gy;
-        const auto gz = -DataStruct->Gz;
+        const auto gy = DataStruct->Gy;
+        const auto gz = DataStruct->Gz;
         DataStruct->Gx = gx;
         DataStruct->Gy = gz;
         DataStruct->Gz = gy;
 
         // Accelerometer:
         const auto ax = DataStruct->Ax;
-        const auto ay = DataStruct->Ay;
-        const auto az = DataStruct->Az;
+        const auto ay = -DataStruct->Ay;
+        const auto az = -DataStruct->Az;
         DataStruct->Ax = ax;
         DataStruct->Ay = az;
         DataStruct->Az = ay;
+    }
+
+    float ToDeg(float rad)
+    {
+        constexpr float toDeg = 180.0f / M_PI;
+        return rad * toDeg;
+    }
+
+    float ToRad(float deg)
+    {
+        constexpr float toRad = M_PI / 180.0f;
+        return deg * toRad;
     }
 }
 
@@ -74,12 +86,12 @@ void ComplementaryFilter::Step(){
     m_pitchAngle = m_config.complementaryFilterAlpha * gyroAngle + (1 - m_config.complementaryFilterAlpha) * accelerometerAngle;
     m_pitchAngleDot = gyroReadings[0];
 
-    debugLogFmt("gyr_x:%.6f\n", m_mpu6050Data.Gx * 180.0 / M_PI);
-    debugLogFmt("gyr_y:%.6f\n", m_mpu6050Data.Gy * 180.0 / M_PI);
-    debugLogFmt("gyr_z:%.6f\n", m_mpu6050Data.Gz * 180.0 / M_PI);
+    debugLogFmt("gyr_x:%.6f\n", ToDeg(m_mpu6050Data.Gx));
+    debugLogFmt("gyr_y:%.6f\n", ToDeg(m_mpu6050Data.Gy));
+    debugLogFmt("gyr_z:%.6f\n", ToDeg(m_mpu6050Data.Gz));
 
     // TODO: Debug: These are being used temporarily to symbilize the accel angle and gyro angle for debugging
-    debugLogFmt("acc_x:%.6f\n", static_cast<float>(accelerometerAngle * 180.0 / M_PI));
+    debugLogFmt("acc_x:%.6f\n", ToDeg(accelerometerAngle));
     // debugLogFmt("acc_y:%.6f\n", gyroAngle);
 
     // debugLogFmt("acc_x:%.6f\n", static_cast<float>(m_mpu6050Data.Ax));
@@ -89,7 +101,7 @@ void ComplementaryFilter::Step(){
 
 float ComplementaryFilter::GetPitchAngle()
 {
-    return m_pitchAngle;
+    return m_pitchAngle + m_pitchAngleOffset;
 }
 float ComplementaryFilter::GetPitchAngleDot()
 {

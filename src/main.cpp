@@ -19,10 +19,12 @@
 void SystemClock_Config(void);
 
 // Define CAN IDs of the Axes. Not to be confused with the encoder SPI CS ports.
-#define ODRV_AXIS0_CAN_ID 0x0 // ID of the Left axis
-#define ODRV_AXIS1_CAN_ID 0x1 // ID of the Right axis
+#define ODRV_AXIS0_CAN_ID 0x4 // ID of the Left axis
+#define ODRV_AXIS1_CAN_ID 0x3 // ID of the Right axis
 
 float enc_pos_0 = 0.0f;
+float enc_pos_0_offset = 0.0f;
+
 float enc_vel_0 = 0.0f;
 float enc_pos_1 = 0.0f;
 float enc_vel_1 = 0.0f;
@@ -44,7 +46,7 @@ void handleCANRx(CANFrame& rxMsg){
 
             // Transmit for visualization
             const float wheelRadius = 0.03f;
-            debugLogFmt("enc_pos_0:%.3f\n", encoderPos * M_TWOPI * wheelRadius);
+            debugLogFmt("enc_pos_0:%.3f\n", (enc_pos_0-enc_pos_0_offset) * M_TWOPI * wheelRadius);
             debugLogFmt("enc_vel_0:%f\n", encoderVel * M_TWOPI * wheelRadius);
         }
         else if (odrvID == ODRV_AXIS1_CAN_ID)
@@ -122,11 +124,12 @@ struct CommandHandler{
         else if (strRx.compare("auto_ctrl") == 0)
         {
             // Initialize wheels to 0
-            axis.setRequestedState(ODrive::AxisState::CLOSED_LOOP_CONTROL);
-            axis.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
-            axis.setInputPos(0, 0, 0);
+            // axis.setRequestedState(ODrive::AxisState::CLOSED_LOOP_CONTROL);
+            // axis.setControllerModes(ODrive::ControlMode::POSITION_CONTROL);
+            // axis.setInputPos(0, 0, 0);
+            enc_pos_0_offset = enc_pos_0;
 
-            HAL_Delay(1000);
+            // HAL_Delay(1000);
             debugLog("dbg_msg: Zeroing wheels done.\n");
 
             axis.setRequestedState(ODrive::AxisState::IDLE);
@@ -368,7 +371,7 @@ int main(void)
         {
             // Populate state
             const auto wheelRadius = 0.03f; // meters
-            state[Controller::StateIndex::X] = enc_pos_0 * M_TWOPI * wheelRadius;
+            state[Controller::StateIndex::X] = (enc_pos_0-enc_pos_0_offset) * M_TWOPI * wheelRadius;
             state[Controller::StateIndex::THETA] = cf.GetPitchAngle();
             state[Controller::StateIndex::X_DOT] = enc_vel_0 * M_TWOPI * wheelRadius;
             state[Controller::StateIndex::THETA_DOT] = cf.GetPitchAngleDot();
