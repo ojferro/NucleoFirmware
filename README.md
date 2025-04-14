@@ -8,6 +8,6 @@
 - `Ctrl + Alt + U`: Upload binaries to Nucleo.
 - `F5`: Build, upload, and run in debug mode.
 
-Picture of BASIS:
+### Picture of BASIS:
 
 ![alt text](images/basis_picture.png)
